@@ -46,9 +46,10 @@ function statusLabel(value) {
 }
 
 function setMessage(target, text, isError = false) {
-  target.textContent = text;
+  const safeText = text ?? "";
+  target.textContent = safeText;
   target.classList.toggle("error", isError);
-  target.classList.toggle("ok", !isError && text.length > 0);
+  target.classList.toggle("ok", !isError && safeText.length > 0);
 }
 
 async function api(path, options = {}) {
@@ -89,13 +90,15 @@ function renderStats(stats) {
 }
 
 function renderTickets(tickets) {
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
   ticketsContainer.innerHTML = "";
-  if (!tickets.length) {
+  if (!safeTickets.length) {
     ticketsContainer.innerHTML = '<p class="meta">No tickets found for this filter.</p>';
     return;
   }
 
-  tickets.forEach((ticket) => {
+  safeTickets.forEach((ticket) => {
+    const comments = Array.isArray(ticket.comments) ? ticket.comments : [];
     const card = document.createElement("article");
     card.className = "ticket";
     card.innerHTML = `
@@ -111,7 +114,7 @@ function renderTickets(tickets) {
       <p class="meta">${ticket.customer} · ${ticket.email}</p>
       <p class="meta">Assignee: ${ticket.assignee || "Unassigned"}</p>
       ${ticket.resolution ? `<p class="meta">Resolution: ${ticket.resolution}</p>` : ""}
-      ${ticket.comments.length ? `<p class="meta">Comments: ${ticket.comments.length}</p>` : ""}
+      ${comments.length ? `<p class="meta">Comments: ${comments.length}</p>` : ""}
     `;
     ticketsContainer.appendChild(card);
   });

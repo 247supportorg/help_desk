@@ -1,0 +1,15 @@
+ChangeLog
+
+2026-06-02
+
+- 7fc347b initial with MIT/Expat
+  - Initialized the FactoryX Help Desk project structure.
+  - Added Go backend, in-memory ticket store, and HTTP API endpoints.
+  - Added web UI assets and project build/run documentation.
+  - Added licensing and repository scaffolding.
+
+- Unreleased (working tree updates prepared for next commit)
+  - Fixed frontend runtime error "Cannot read properties of null (reading 'length')" by guarding nullable values in message rendering.
+  - Hardened ticket rendering in the web UI by safely handling missing ticket arrays and comments arrays.
+  - Updated backend ticket copy logic to always serialize empty comments as [] instead of null.
+  - Rebuilt local binaries/artifacts currently tracked in this repository state.

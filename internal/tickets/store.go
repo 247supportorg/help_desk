@@ -199,7 +199,7 @@ func (s *Store) Stats() Stats {
 
 func copyTicket(t *Ticket) Ticket {
 	out := *t
-	out.Comments = append([]Comment(nil), t.Comments...)
+	out.Comments = append(make([]Comment, 0, len(t.Comments)), t.Comments...)
 	return out
 }
 
