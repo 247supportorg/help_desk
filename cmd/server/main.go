@@ -85,10 +85,6 @@ type signupRequest struct {
 	ConfirmPassword string `json:"confirmPassword"`
 }
 
-type adminApprovalRequest struct {
-	Email string `json:"email"`
-}
-
 type setupRequest struct {
 	AppPort            string `json:"appPort"`
 	StoreBackend       string `json:"storeBackend"`
@@ -179,9 +175,6 @@ func main() {
 	mux.HandleFunc("/api/tickets/", s.handleTicketByID)
 	mux.HandleFunc("/api/stats", s.handleStats)
 	mux.HandleFunc("/api/admins", s.handleAdmins)
-	mux.HandleFunc("/api/admin/pending", s.handleAdminPending)
-	mux.HandleFunc("/api/admin/approve", s.handleAdminApprove)
-	mux.HandleFunc("/api/admin/reject", s.handleAdminReject)
 	mux.HandleFunc("/api/auth/login", s.handleLogin)
 	mux.HandleFunc("/api/auth/signup", s.handleSignup)
 	mux.HandleFunc("/api/auth/me", s.handleAuthMe)
@@ -527,10 +520,6 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	ok, err := s.accounts.Login(req.Email, req.Password)
 	if err != nil {
-		if errors.Is(err, accounts.ErrAccountPending) {
-			writeJSON(w, http.StatusForbidden, writeError{Error: err.Error()})
-			return
-		}
 		writeAccountError(w, err, "login")
 		return
 	}
@@ -594,103 +583,8 @@ func (s *server) handleSignup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
 		"email":   email,
-		"status":  accounts.UserStatusPending,
-		"message": "Account created, pending admin approval",
+		"message": "Account created",
 	})
-}
-
-func (s *server) handleAdminPending(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, writeError{Error: "method not allowed"})
-		return
-	}
-	if !s.isAuthenticated(r) {
-		writeJSON(w, http.StatusUnauthorized, writeError{Error: "not authenticated"})
-		return
-	}
-
-	pending, err := s.accounts.ListPendingUsers()
-	if err != nil {
-		log.Printf("list pending users failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, writeError{Error: "internal server error"})
-		return
-	}
-	if pending == nil {
-		pending = []accounts.UserInfo{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"pending": pending})
-}
-
-func (s *server) handleAdminApprove(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, writeError{Error: "method not allowed"})
-		return
-	}
-	if !s.isAuthenticated(r) {
-		writeJSON(w, http.StatusUnauthorized, writeError{Error: "not authenticated"})
-		return
-	}
-
-	var req adminApprovalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, writeError{Error: "invalid JSON payload"})
-		return
-	}
-	email := strings.ToLower(strings.TrimSpace(req.Email))
-	if email == "" {
-		writeJSON(w, http.StatusBadRequest, writeError{Error: "email is required"})
-		return
-	}
-
-	if err := s.accounts.ApproveUser(email); err != nil {
-		if errors.Is(err, accounts.ErrEmailNotFound) {
-			writeJSON(w, http.StatusNotFound, writeError{Error: "user not found"})
-			return
-		}
-		log.Printf("approve user failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, writeError{Error: "internal server error"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "email": email, "status": accounts.UserStatusApproved})
-}
-
-func (s *server) handleAdminReject(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, writeError{Error: "method not allowed"})
-		return
-	}
-	if !s.isAuthenticated(r) {
-		writeJSON(w, http.StatusUnauthorized, writeError{Error: "not authenticated"})
-		return
-	}
-
-	var req adminApprovalRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, writeError{Error: "invalid JSON payload"})
-		return
-	}
-	email := strings.ToLower(strings.TrimSpace(req.Email))
-	if email == "" {
-		writeJSON(w, http.StatusBadRequest, writeError{Error: "email is required"})
-		return
-	}
-
-	if err := s.accounts.RejectUser(email); err != nil {
-		if errors.Is(err, accounts.ErrEmailNotFound) {
-			writeJSON(w, http.StatusNotFound, writeError{Error: "user not found"})
-			return
-		}
-		if errors.Is(err, accounts.ErrNotPending) {
-			writeJSON(w, http.StatusConflict, writeError{Error: "user is not pending approval"})
-			return
-		}
-		log.Printf("reject user failed: %v", err)
-		writeJSON(w, http.StatusInternalServerError, writeError{Error: "internal server error"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "email": email})
 }
 
 func (s *server) handleAuthMe(w http.ResponseWriter, r *http.Request) {

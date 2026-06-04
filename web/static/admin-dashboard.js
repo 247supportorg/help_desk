@@ -9,14 +9,9 @@ const adminUpdateMessage = document.getElementById("admin-update-message");
 const adminCommentForm = document.getElementById("admin-comment-form");
 const adminCommentMessage = document.getElementById("admin-comment-message");
 const adminUpdateAssigneesDatalist = document.getElementById("admin-update-assignees-datalist");
-const pendingApprovalsSection = document.getElementById("pending-approvals-section");
-const pendingApprovalsList = document.getElementById("pending-approvals-list");
-const pendingCount = document.getElementById("pending-count");
-const pendingRefresh = document.getElementById("pending-refresh");
 
 let currentAdminEmail = "";
 let adminEmails = [];
-let pendingUsers = [];
 
 function statusLabel(value) {
   switch (value) {
@@ -273,72 +268,6 @@ async function refreshBoard() {
   renderStats(stats);
   renderAdminUpdateAssigneesDatalist();
   prefillAdminAuthor();
-  await refreshPendingApprovals();
-}
-
-async function refreshPendingApprovals() {
-  if (!pendingApprovalsSection || !pendingApprovalsList || !pendingCount) return;
-  try {
-    const data = await api("/api/admin/pending");
-    pendingUsers = Array.isArray(data && data.users) ? data.users : [];
-  } catch (error) {
-    pendingUsers = [];
-    if (pendingApprovalsList) {
-      pendingApprovalsList.innerHTML = `<p class="empty error">${escapeHTML(error.message || "Unable to load pending accounts.")}</p>`;
-    }
-    pendingCount.textContent = "0";
-    return;
-  }
-  renderPendingApprovals();
-}
-
-function renderPendingApprovals() {
-  if (!pendingApprovalsList || !pendingCount) return;
-  pendingCount.textContent = String(pendingUsers.length);
-  if (!pendingUsers.length) {
-    pendingApprovalsList.innerHTML = `<p class="empty">No pending signups. New admin registrations will appear here.</p>`;
-    return;
-  }
-  pendingApprovalsList.innerHTML = pendingUsers
-    .map((user) => {
-      const email = escapeHTML(user.email || "");
-      const created = user.createdAt ? new Date(user.createdAt).toLocaleString() : "";
-      return `
-        <div class="pending-user" data-email="${email}">
-          <div class="pending-user-info">
-            <strong>${email}</strong>
-            <span class="meta">${escapeHTML(created)}</span>
-          </div>
-          <div class="pending-user-actions">
-            <button class="primary-button pending-approve" type="button" data-email="${email}">Approve</button>
-            <button class="secondary-button pending-reject" type="button" data-email="${email}">Reject</button>
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-  pendingApprovalsList.querySelectorAll(".pending-approve").forEach((btn) => {
-    btn.addEventListener("click", () => decidePending(btn.dataset.email, "approve"));
-  });
-  pendingApprovalsList.querySelectorAll(".pending-reject").forEach((btn) => {
-    btn.addEventListener("click", () => decidePending(btn.dataset.email, "reject"));
-  });
-}
-
-async function decidePending(email, action) {
-  const targetEmail = String(email || "").trim();
-  if (!targetEmail) return;
-  const verb = action === "approve" ? "Approve" : "Reject";
-  if (!window.confirm(`${verb} admin signup for ${targetEmail}?`)) return;
-  try {
-    await api(`/api/admin/${action}`, {
-      method: "POST",
-      body: JSON.stringify({ email: targetEmail }),
-    });
-    await refreshPendingApprovals();
-  } catch (error) {
-    window.alert(error.message || `Unable to ${action} account.`);
-  }
 }
 
 function renderAdminUpdateAssigneesDatalist() {
@@ -361,12 +290,6 @@ function setAdminActionMessage(target, text, isError = false) {
   target.textContent = text || "";
   target.classList.toggle("error", isError);
   target.classList.toggle("ok", !isError && Boolean(text));
-}
-
-if (pendingRefresh) {
-  pendingRefresh.addEventListener("click", () => {
-    refreshPendingApprovals().catch(() => {});
-  });
 }
 
 adminUpdateForm.addEventListener("submit", async (event) => {
