@@ -39,7 +39,7 @@ type Ticket struct {
 	Description string    `json:"description"`
 	Priority    string    `json:"priority"`
 	Status      string    `json:"status"`
-	Assignee    string    `json:"assignee,omitempty"`
+	Assignees   []string  `json:"assignees"`
 	Resolution  string    `json:"resolution,omitempty"`
 	Comments    []Comment `json:"comments"`
 	CreatedAt   time.Time `json:"createdAt"`
@@ -62,9 +62,9 @@ type CreateTicketRequest struct {
 }
 
 type UpdateTicketRequest struct {
-	Status     string `json:"status"`
-	Assignee   string `json:"assignee"`
-	Resolution string `json:"resolution"`
+	Status     string   `json:"status"`
+	Assignees  []string `json:"assignees"`
+	Resolution string   `json:"resolution"`
 }
 
 type AddCommentRequest struct {

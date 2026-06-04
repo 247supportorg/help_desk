@@ -24,13 +24,13 @@ SOFTWARE.
 
 const createForm = document.getElementById("create-ticket-form");
 const createMessage = document.getElementById("create-message");
-const updateForm = document.getElementById("update-ticket-form");
-const updateMessage = document.getElementById("update-message");
-const commentForm = document.getElementById("comment-form");
-const commentMessage = document.getElementById("comment-message");
 const statusFilter = document.getElementById("status-filter");
 const ticketsContainer = document.getElementById("tickets");
 const statsContainer = document.getElementById("stats");
+const ticketBoardCard = document.getElementById("ticket-board-card");
+const ticketBoardSignin = document.getElementById("ticket-board-signin");
+
+let isAdmin = false;
 
 function statusLabel(value) {
   switch (value) {
@@ -99,6 +99,7 @@ function renderTickets(tickets) {
 
   safeTickets.forEach((ticket) => {
     const comments = Array.isArray(ticket.comments) ? ticket.comments : [];
+    const assignees = Array.isArray(ticket.assignees) ? ticket.assignees : [];
     const card = document.createElement("article");
     card.className = "ticket";
     card.innerHTML = `
@@ -112,7 +113,7 @@ function renderTickets(tickets) {
       </div>
       <p>${ticket.description}</p>
       <p class="meta">${ticket.customer} · ${ticket.email}</p>
-      <p class="meta">Assignee: ${ticket.assignee || "Unassigned"}</p>
+      <p class="meta">Assignees: ${assignees.length ? assignees.join(", ") : "Unassigned"}</p>
       ${ticket.resolution ? `<p class="meta">Resolution: ${ticket.resolution}</p>` : ""}
       ${comments.length ? `<p class="meta">Comments: ${comments.length}</p>` : ""}
     `;
@@ -121,6 +122,9 @@ function renderTickets(tickets) {
 }
 
 async function refreshBoard() {
+  if (!isAdmin) {
+    return;
+  }
   const status = statusFilter.value;
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   const [tickets, stats] = await Promise.all([
@@ -147,79 +151,43 @@ createForm.addEventListener("submit", async (event) => {
 
     createForm.reset();
     setMessage(createMessage, `Ticket #${ticket.id} created successfully.`);
-    await refreshBoard();
+    if (isAdmin) {
+      await refreshBoard();
+    }
   } catch (err) {
     setMessage(createMessage, err.message, true);
   }
 });
 
-updateForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  setMessage(updateMessage, "");
-
-  const formData = new FormData(updateForm);
-  const ticketId = formData.get("ticketId");
-  if (!ticketId) {
-    setMessage(updateMessage, "Ticket ID is required.", true);
-    return;
-  }
-
-  const body = {
-    assignee: String(formData.get("assignee") || ""),
-    status: String(formData.get("status") || ""),
-    resolution: String(formData.get("resolution") || ""),
-  };
-
-  try {
-    await api(`/api/tickets/${ticketId}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    });
-
-    setMessage(updateMessage, `Ticket #${ticketId} updated.`);
-    await refreshBoard();
-  } catch (err) {
-    setMessage(updateMessage, err.message, true);
-  }
-});
-
-commentForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  setMessage(commentMessage, "");
-
-  const formData = new FormData(commentForm);
-  const ticketId = formData.get("ticketId");
-  if (!ticketId) {
-    setMessage(commentMessage, "Ticket ID is required.", true);
-    return;
-  }
-
-  const body = {
-    author: String(formData.get("author") || ""),
-    message: String(formData.get("message") || ""),
-    internal: formData.get("internal") === "on",
-  };
-
-  try {
-    await api(`/api/tickets/${ticketId}/comments`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
-
-    commentForm.reset();
-    setMessage(commentMessage, `Comment posted to ticket #${ticketId}.`);
-    await refreshBoard();
-  } catch (err) {
-    setMessage(commentMessage, err.message, true);
-  }
-});
-
 statusFilter.addEventListener("change", () => {
   refreshBoard().catch((err) => {
-    setMessage(updateMessage, err.message, true);
+    setMessage(createMessage, `Failed to load tickets: ${err.message}`, true);
   });
 });
 
-refreshBoard().catch((err) => {
-  setMessage(createMessage, `Failed to load tickets: ${err.message}`, true);
-});
+async function initAuthState() {
+  try {
+    const me = await api("/api/auth/me");
+    if (me && me.authenticated && me.email) {
+      isAdmin = true;
+      ticketBoardCard.hidden = false;
+      ticketBoardSignin.hidden = true;
+    } else {
+      showSigninPrompt();
+    }
+  } catch (err) {
+    showSigninPrompt();
+  }
+}
+
+function showSigninPrompt() {
+  isAdmin = false;
+  ticketBoardCard.hidden = true;
+  ticketBoardSignin.hidden = false;
+}
+
+initAuthState()
+  .then(() => refreshBoard())
+  .catch((err) => {
+    setMessage(createMessage, `Failed to load tickets: ${err.message}`, true);
+  });

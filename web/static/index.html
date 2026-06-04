@@ -41,6 +41,9 @@ SOFTWARE.
         <p class="eyebrow">FactoryX Internal Ops</p>
         <h1>Help Desk Ticket Center</h1>
         <p class="subtext">Resolve customer requests and technical issues through a focused ticket workflow.</p>
+        <div class="hero-links">
+          <a class="hero-link" href="/admin/login">Admin Sign In</a>
+        </div>
       </div>
       <div class="stats" id="stats"></div>
     </header>
@@ -79,7 +82,7 @@ SOFTWARE.
         </form>
       </article>
 
-      <article class="panel reveal delay-2">
+      <article id="ticket-board-card" class="panel reveal delay-2" hidden>
         <div class="row">
           <h2>Ticket Board</h2>
           <label class="visually-hidden" for="status-filter">Filter tickets by status</label>
@@ -93,59 +96,12 @@ SOFTWARE.
         </div>
         <div id="tickets" class="tickets"></div>
       </article>
-    </section>
 
-    <section class="panel reveal delay-3">
-      <h2>Update Ticket</h2>
-      <form id="update-ticket-form" class="split">
-        <label>
-          Ticket ID
-          <input type="number" name="ticketId" min="1" required placeholder="1" />
-        </label>
-        <label>
-          Assignee
-          <input type="text" name="assignee" placeholder="Support Agent" />
-        </label>
-        <label>
-          Status
-          <select name="status">
-            <option value="">No change</option>
-            <option value="open">Open</option>
-            <option value="in_progress">In Progress</option>
-            <option value="resolved">Resolved</option>
-            <option value="closed">Closed</option>
-          </select>
-        </label>
-        <label>
-          Resolution Notes
-          <input type="text" name="resolution" placeholder="Root cause and fix summary" />
-        </label>
-        <button type="submit">Apply Update</button>
-        <p id="update-message" class="message"></p>
-      </form>
-
-      <hr />
-
-      <h3>Add Comment</h3>
-      <form id="comment-form" class="split">
-        <label>
-          Ticket ID
-          <input type="number" name="ticketId" min="1" required placeholder="1" />
-        </label>
-        <label>
-          Author
-          <input type="text" name="author" required placeholder="NOC Team" />
-        </label>
-        <label class="wide">
-          Message
-          <input type="text" name="message" required placeholder="Investigating logs and firewall policies" />
-        </label>
-        <label class="inline">
-          <input type="checkbox" name="internal" /> Internal note
-        </label>
-        <button type="submit">Post Comment</button>
-        <p id="comment-message" class="message"></p>
-      </form>
+      <article id="ticket-board-signin" class="panel reveal delay-2" hidden>
+        <h2>Ticket Board</h2>
+        <p class="meta">Ticket board is restricted to authenticated administrators.</p>
+        <a class="hero-link" href="/admin/login">Admin Sign In</a>
+      </article>
     </section>
   </main>
 

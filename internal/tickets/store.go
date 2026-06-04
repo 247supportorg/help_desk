@@ -32,6 +32,15 @@ import (
 
 var ErrNotFound = errors.New("ticket not found")
 
+type Repository interface {
+	Create(req CreateTicketRequest) (Ticket, error)
+	Get(id int) (Ticket, bool, error)
+	List(status string) ([]Ticket, error)
+	Update(id int, req UpdateTicketRequest) (Ticket, error)
+	AddComment(id int, req AddCommentRequest) (Ticket, error)
+	Stats() (Stats, error)
+}
+
 type Store struct {
 	mu      sync.RWMutex
 	nextID  int
@@ -71,6 +80,7 @@ func (s *Store) Create(req CreateTicketRequest) (Ticket, error) {
 		Description: description,
 		Priority:    priority,
 		Status:      StatusOpen,
+		Assignees:   make([]string, 0),
 		Comments:    make([]Comment, 0),
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -81,18 +91,18 @@ func (s *Store) Create(req CreateTicketRequest) (Ticket, error) {
 	return copyTicket(t), nil
 }
 
-func (s *Store) Get(id int) (Ticket, bool) {
+func (s *Store) Get(id int) (Ticket, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	t, ok := s.tickets[id]
 	if !ok {
-		return Ticket{}, false
+		return Ticket{}, false, nil
 	}
-	return copyTicket(t), true
+	return copyTicket(t), true, nil
 }
 
-func (s *Store) List(status string) []Ticket {
+func (s *Store) List(status string) ([]Ticket, error) {
 	normalizedStatus := strings.TrimSpace(strings.ToLower(status))
 
 	s.mu.RLock()
@@ -112,7 +122,7 @@ func (s *Store) List(status string) []Ticket {
 		}
 		return out[i].ID > out[j].ID
 	})
-	return out
+	return out, nil
 }
 
 func (s *Store) Update(id int, req UpdateTicketRequest) (Ticket, error) {
@@ -131,8 +141,12 @@ func (s *Store) Update(id int, req UpdateTicketRequest) (Ticket, error) {
 		t.Status = status
 	}
 
-	if assignee := strings.TrimSpace(req.Assignee); assignee != "" {
-		t.Assignee = assignee
+	if req.Assignees != nil {
+		normalized, err := normalizeAssignees(req.Assignees)
+		if err != nil {
+			return Ticket{}, err
+		}
+		t.Assignees = normalized
 	}
 
 	if resolution := strings.TrimSpace(req.Resolution); resolution != "" {
@@ -176,7 +190,7 @@ func (s *Store) AddComment(id int, req AddCommentRequest) (Ticket, error) {
 	return copyTicket(t), nil
 }
 
-func (s *Store) Stats() Stats {
+func (s *Store) Stats() (Stats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -194,12 +208,13 @@ func (s *Store) Stats() Stats {
 		}
 		stats.Total++
 	}
-	return stats
+	return stats, nil
 }
 
 func copyTicket(t *Ticket) Ticket {
 	out := *t
 	out.Comments = append(make([]Comment, 0, len(t.Comments)), t.Comments...)
+	out.Assignees = append(make([]string, 0, len(t.Assignees)), t.Assignees...)
 	return out
 }
 
@@ -227,4 +242,38 @@ func isValidStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func normalizeAssignees(emails []string) ([]string, error) {
+	seen := make(map[string]struct{}, len(emails))
+	out := make([]string, 0, len(emails))
+	for _, raw := range emails {
+		email := strings.ToLower(strings.TrimSpace(raw))
+		if email == "" {
+			continue
+		}
+		if !isLikelyEmail(email) {
+			return nil, errors.New("assignees must contain valid email addresses")
+		}
+		if _, ok := seen[email]; ok {
+			continue
+		}
+		seen[email] = struct{}{}
+		out = append(out, email)
+	}
+	return out, nil
+}
+
+func isLikelyEmail(email string) bool {
+	if len(email) < 3 {
+		return false
+	}
+	at := strings.Index(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		return false
+	}
+	if strings.Index(email[at+1:], "@") != -1 {
+		return false
+	}
+	return strings.Contains(email[at+1:], ".")
 }

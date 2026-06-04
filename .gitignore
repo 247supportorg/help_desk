@@ -1,0 +1,23 @@
+# Environment files with secrets
+.env
+.env.*
+*.env
+help-desk.env
+
+# Encrypted setup snapshots (AES-256-GCM, contains all secrets)
+*.enc
+
+# Build artifacts
+bin/
+server
+*.exe
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
