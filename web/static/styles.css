@@ -584,3 +584,147 @@ button:active {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.pending-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--panel-border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+  background: var(--panel-soft, rgba(255, 255, 255, 0.04));
+  flex-wrap: wrap;
+}
+
+.pending-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.pending-user-info .meta {
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+.pending-user-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pending-user-actions button {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.empty {
+  font-size: 0.9rem;
+  opacity: 0.7;
+  margin: 0;
+}
+
+.empty.error {
+  color: #ff8a8a;
+  opacity: 1;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  background: rgba(120, 168, 255, 0.18);
+  color: var(--text, inherit);
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: 0.4rem;
+}
+
+.application-approved {
+  border-color: rgba(110, 200, 130, 0.4);
+  background: rgba(110, 200, 130, 0.06);
+}
+
+.application-rejected {
+  border-color: rgba(255, 138, 138, 0.4);
+  background: rgba(255, 138, 138, 0.06);
+}
+
+.application-status {
+  display: inline-block;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.application-status-approved {
+  background: rgba(110, 200, 130, 0.2);
+  color: #6ec882;
+}
+
+.application-status-rejected {
+  background: rgba(255, 138, 138, 0.2);
+  color: #ff8a8a;
+}
+
+.callout.notice {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 196, 87, 0.45);
+  border-radius: 12px;
+  background: rgba(255, 196, 87, 0.08);
+  color: var(--text, inherit);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0 0 0.5rem;
+}
+
+.callout.notice strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: #ffc457;
+}
+
+.danger-button {
+  background: rgba(255, 110, 110, 0.12);
+  color: #ff8a8a;
+  border: 1px solid rgba(255, 110, 110, 0.4);
+  border-radius: 10px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.danger-button:hover {
+  background: rgba(255, 110, 110, 0.22);
+  color: #ffb0b0;
+}
+
+.danger-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.danger-zone {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}

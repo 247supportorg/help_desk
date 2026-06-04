@@ -9,9 +9,24 @@ const adminUpdateMessage = document.getElementById("admin-update-message");
 const adminCommentForm = document.getElementById("admin-comment-form");
 const adminCommentMessage = document.getElementById("admin-comment-message");
 const adminUpdateAssigneesDatalist = document.getElementById("admin-update-assignees-datalist");
+const pendingApprovalsSection = document.getElementById("pending-approvals-section");
+const pendingApprovalsList = document.getElementById("pending-approvals-list");
+const pendingCount = document.getElementById("pending-count");
+const pendingRefresh = document.getElementById("pending-refresh");
+const approvedApplicationsList = document.getElementById("approved-applications-list");
+const approvedCount = document.getElementById("approved-count");
+const approvedRefresh = document.getElementById("approved-refresh");
+const rejectedApplicationsList = document.getElementById("rejected-applications-list");
+const rejectedCount = document.getElementById("rejected-count");
+const rejectedRefresh = document.getElementById("rejected-refresh");
+const approvedDeleteAll = document.getElementById("approved-delete-all");
+const rejectedDeleteAll = document.getElementById("rejected-delete-all");
 
 let currentAdminEmail = "";
 let adminEmails = [];
+let pendingUsers = [];
+let approvedUsers = [];
+let rejectedUsers = [];
 
 function statusLabel(value) {
   switch (value) {
@@ -268,6 +283,174 @@ async function refreshBoard() {
   renderStats(stats);
   renderAdminUpdateAssigneesDatalist();
   prefillAdminAuthor();
+  await Promise.all([refreshPendingApprovals(), refreshApprovedApplications(), refreshRejectedApplications()]);
+}
+
+async function refreshPendingApprovals() {
+  if (!pendingApprovalsSection || !pendingApprovalsList || !pendingCount) return;
+  try {
+    const data = await api("/api/admin/pending");
+    pendingUsers = Array.isArray(data && data.pending) ? data.pending : [];
+  } catch (error) {
+    pendingUsers = [];
+    if (pendingApprovalsList) {
+      pendingApprovalsList.innerHTML = `<p class="empty error">${escapeHTML(error.message || "Unable to load pending accounts.")}</p>`;
+    }
+    pendingCount.textContent = "0";
+    return;
+  }
+  renderPendingApprovals();
+}
+
+function renderPendingApprovals() {
+  if (!pendingApprovalsList || !pendingCount) return;
+  pendingCount.textContent = String(pendingUsers.length);
+  if (!pendingUsers.length) {
+    pendingApprovalsList.innerHTML = `<p class="empty">No pending signups. Public registration is closed.</p>`;
+    return;
+  }
+  pendingApprovalsList.innerHTML = pendingUsers
+    .map((user) => {
+      const email = escapeHTML(user.email || "");
+      const created = user.createdAt ? new Date(user.createdAt).toLocaleString() : "";
+      return `
+        <div class="pending-user" data-email="${email}">
+          <div class="pending-user-info">
+            <strong>${email}</strong>
+            <span class="meta">${escapeHTML(created)}</span>
+          </div>
+          <div class="pending-user-actions">
+            <button class="primary-button pending-approve" type="button" data-email="${email}">Approve</button>
+            <button class="secondary-button pending-reject" type="button" data-email="${email}">Reject</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+  pendingApprovalsList.querySelectorAll(".pending-approve").forEach((btn) => {
+    btn.addEventListener("click", () => decidePending(btn.dataset.email, "approve"));
+  });
+  pendingApprovalsList.querySelectorAll(".pending-reject").forEach((btn) => {
+    btn.addEventListener("click", () => decidePending(btn.dataset.email, "reject"));
+  });
+}
+
+async function decidePending(email, action) {
+  const targetEmail = String(email || "").trim();
+  if (!targetEmail) return;
+  const verb = action === "approve" ? "Approve" : "Reject";
+  if (!window.confirm(`${verb} admin signup for ${targetEmail}?`)) return;
+  try {
+    await api(`/api/admin/${action}`, {
+      method: "POST",
+      body: JSON.stringify({ email: targetEmail }),
+    });
+    await Promise.all([refreshPendingApprovals(), refreshApprovedApplications(), refreshRejectedApplications()]);
+  } catch (error) {
+    window.alert(error.message || `Unable to ${action} account.`);
+  }
+}
+
+async function deleteUsers(emails, confirmMessage) {
+  const list = Array.isArray(emails) ? emails.filter(Boolean) : [];
+  if (!list.length) return;
+  if (!window.confirm(confirmMessage)) return;
+  try {
+    const result = await api("/api/admin/delete", {
+      method: "POST",
+      body: JSON.stringify({ emails: list }),
+    });
+    const deleted = Number(result && result.deleted) || 0;
+    window.alert(`${deleted} account(s) deleted.`);
+    await Promise.all([refreshApprovedApplications(), refreshRejectedApplications()]);
+  } catch (error) {
+    window.alert(error.message || "Delete failed.");
+  }
+}
+
+async function deleteOneUser(email, kind) {
+  await deleteUsers(
+    [email],
+    `Permanently delete ${kind} account ${email}? This cannot be undone.`,
+  );
+}
+
+async function refreshApprovedApplications() {
+  if (!approvedApplicationsList || !approvedCount) return;
+  try {
+    const data = await api("/api/admin/approved");
+    approvedUsers = Array.isArray(data && data.users) ? data.users : [];
+  } catch (error) {
+    approvedUsers = [];
+    approvedApplicationsList.innerHTML = `<p class="empty error">${escapeHTML(error.message || "Unable to load approved accounts.")}</p>`;
+    approvedCount.textContent = "0";
+    return;
+  }
+  renderApprovedApplications();
+}
+
+function renderApprovedApplications() {
+  if (!approvedApplicationsList || !approvedCount) return;
+  approvedCount.textContent = String(approvedUsers.length);
+  if (!approvedUsers.length) {
+    approvedApplicationsList.innerHTML = `<p class="empty">No accepted applications yet.</p>`;
+    return;
+  }
+  approvedApplicationsList.innerHTML = approvedUsers
+    .map((user) => applicationRow(user, "approved"))
+    .join("");
+  approvedApplicationsList.querySelectorAll(".application-delete").forEach((btn) => {
+    btn.addEventListener("click", () => deleteOneUser(btn.dataset.email, "approved"));
+  });
+}
+
+async function refreshRejectedApplications() {
+  if (!rejectedApplicationsList || !rejectedCount) return;
+  try {
+    const data = await api("/api/admin/rejected");
+    rejectedUsers = Array.isArray(data && data.users) ? data.users : [];
+  } catch (error) {
+    rejectedUsers = [];
+    rejectedApplicationsList.innerHTML = `<p class="empty error">${escapeHTML(error.message || "Unable to load rejected accounts.")}</p>`;
+    rejectedCount.textContent = "0";
+    return;
+  }
+  renderRejectedApplications();
+}
+
+function renderRejectedApplications() {
+  if (!rejectedApplicationsList || !rejectedCount) return;
+  rejectedCount.textContent = String(rejectedUsers.length);
+  if (!rejectedUsers.length) {
+    rejectedApplicationsList.innerHTML = `<p class="empty">No rejected applications.</p>`;
+    return;
+  }
+  rejectedApplicationsList.innerHTML = rejectedUsers
+    .map((user) => applicationRow(user, "rejected"))
+    .join("");
+  rejectedApplicationsList.querySelectorAll(".application-delete").forEach((btn) => {
+    btn.addEventListener("click", () => deleteOneUser(btn.dataset.email, "rejected"));
+  });
+}
+
+function applicationRow(user, kind) {
+  const email = escapeHTML(user.email || "");
+  const created = user.createdAt ? new Date(user.createdAt).toLocaleString() : "";
+  const canDelete = kind === "approved"
+    ? email.toLowerCase() !== String(currentAdminEmail || "").toLowerCase()
+    : true;
+  return `
+    <div class="pending-user application-${kind}" data-email="${email}">
+      <div class="pending-user-info">
+        <strong>${email}</strong>
+        <span class="meta">${escapeHTML(created)}</span>
+      </div>
+      <div class="pending-user-actions">
+        <span class="application-status application-status-${kind}">${kind}</span>
+        ${canDelete ? `<button class="danger-button application-delete" type="button" data-email="${email}" data-kind="${kind}">Delete</button>` : ""}
+      </div>
+    </div>
+  `;
 }
 
 function renderAdminUpdateAssigneesDatalist() {
@@ -290,6 +473,42 @@ function setAdminActionMessage(target, text, isError = false) {
   target.textContent = text || "";
   target.classList.toggle("error", isError);
   target.classList.toggle("ok", !isError && Boolean(text));
+}
+
+if (pendingRefresh) {
+  pendingRefresh.addEventListener("click", () => {
+    refreshPendingApprovals().catch(() => {});
+  });
+}
+if (approvedRefresh) {
+  approvedRefresh.addEventListener("click", () => {
+    refreshApprovedApplications().catch(() => {});
+  });
+}
+if (rejectedRefresh) {
+  rejectedRefresh.addEventListener("click", () => {
+    refreshRejectedApplications().catch(() => {});
+  });
+}
+if (approvedDeleteAll) {
+  approvedDeleteAll.addEventListener("click", () => {
+    const others = approvedUsers
+      .map((u) => String(u.email || "").trim())
+      .filter((e) => e && e.toLowerCase() !== String(currentAdminEmail || "").toLowerCase());
+    deleteUsers(
+      others,
+      `Permanently delete ${others.length} approved admin account(s) (everyone except you)? This cannot be undone.`,
+    );
+  });
+}
+if (rejectedDeleteAll) {
+  rejectedDeleteAll.addEventListener("click", () => {
+    const all = rejectedUsers.map((u) => String(u.email || "").trim()).filter(Boolean);
+    deleteUsers(
+      all,
+      `Permanently delete ${all.length} rejected application(s)? This cannot be undone.`,
+    );
+  });
 }
 
 adminUpdateForm.addEventListener("submit", async (event) => {

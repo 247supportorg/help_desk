@@ -106,7 +106,10 @@ loginForm.addEventListener("submit", async (event) => {
     setMessage(loginMessage, "Signed in successfully.");
     window.location.replace("/admin");
   } catch (error) {
-    setMessage(loginMessage, error.message, true);
+    const msg = String(error.message || "").toLowerCase().includes("pending")
+      ? "Your account is pending admin approval. You'll be able to sign in once an existing admin approves your account."
+      : error.message;
+    setMessage(loginMessage, msg, true);
   }
 });
 
@@ -187,10 +190,16 @@ signupForm.addEventListener("submit", async (event) => {
       method: "POST",
       body: JSON.stringify(payload),
     });
-    setMessage(signupMessage, "Account created. You can sign in now.");
-    setTimeout(() => {
-      window.location.replace("/admin");
-    }, 600);
+    setMessage(
+      signupMessage,
+      "Account created, pending admin approval. You will be able to sign in once an existing admin approves your account.",
+    );
+    signupForm.querySelectorAll("input").forEach((input) => {
+      if (input.type !== "submit") {
+        input.value = "";
+        input.disabled = true;
+      }
+    });
   } catch (error) {
     setMessage(signupMessage, error.message, true);
     button.disabled = false;

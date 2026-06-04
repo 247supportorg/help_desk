@@ -74,6 +74,45 @@ SOFTWARE.
       <div id="admin-tickets" class="tickets admin-tickets"></div>
     </section>
 
+    <section class="panel reveal delay-3" id="pending-approvals-section">
+      <div class="row">
+        <h2>Pending Approvals <span id="pending-count" class="badge">0</span></h2>
+        <button id="pending-refresh" class="secondary-button" type="button">Refresh</button>
+      </div>
+      <p class="meta">Public registration is closed. New admin signups wait here until an existing administrator approves or rejects them.</p>
+      <div id="pending-approvals-list" class="pending-list">
+        <p class="empty">Loading pending accounts…</p>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="approved-applications-section">
+      <div class="row">
+        <h2>Accepted Applications <span id="approved-count" class="badge">0</span></h2>
+        <button id="approved-refresh" class="secondary-button" type="button">Refresh</button>
+      </div>
+      <p class="meta">Admin signups approved by an existing administrator.</p>
+      <div id="approved-applications-list" class="pending-list">
+        <p class="empty">Loading approved accounts…</p>
+      </div>
+      <div class="danger-zone">
+        <button id="approved-delete-all" class="danger-button" type="button">Delete all (except me)</button>
+      </div>
+    </section>
+
+    <section class="panel reveal delay-3" id="rejected-applications-section">
+      <div class="row">
+        <h2>Rejected Applications <span id="rejected-count" class="badge">0</span></h2>
+        <button id="rejected-refresh" class="secondary-button" type="button">Refresh</button>
+      </div>
+      <p class="meta">Admin signups rejected by an existing administrator.</p>
+      <div id="rejected-applications-list" class="pending-list">
+        <p class="empty">Loading rejected accounts…</p>
+      </div>
+      <div class="danger-zone">
+        <button id="rejected-delete-all" class="danger-button" type="button">Delete all rejected</button>
+      </div>
+    </section>
+
     <section class="panel reveal delay-3" id="admin-actions-section">
       <h2>Administrator Actions</h2>
       <p class="meta">These tools are only visible to signed-in administrators.</p>

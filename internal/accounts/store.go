@@ -21,7 +21,21 @@ var (
 	ErrInvalidResetToken = errors.New("invalid or expired reset token")
 	ErrEmailExists       = errors.New("email already registered")
 	ErrEmailNotFound     = errors.New("email not found")
+	ErrAccountPending    = errors.New("account pending admin approval")
+	ErrNotPending        = errors.New("user is not pending approval")
 )
+
+const (
+	UserStatusApproved = "approved"
+	UserStatusPending  = "pending"
+	UserStatusRejected = "rejected"
+)
+
+type UserInfo struct {
+	Email     string    `json:"email"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+}
 
 type Repository interface {
 	BootstrapFirstUser(email, password string) (bool, error)
@@ -30,6 +44,12 @@ type Repository interface {
 	ResetPassword(token, newPassword string) error
 	ListEmails() ([]string, error)
 	CreateUser(email, password string) (bool, error)
+	ApproveUser(email string) error
+	RejectUser(email string) error
+	ListPendingUsers() ([]UserInfo, error)
+	ListApprovedUsers() ([]UserInfo, error)
+	ListRejectedUsers() ([]UserInfo, error)
+	DeleteUsers(emails []string) (int, error)
 }
 
 type MemoryStore struct {
@@ -44,6 +64,7 @@ type memoryUser struct {
 	ID           int
 	Email        string
 	PasswordHash []byte
+	Status       string
 	CreatedAt    time.Time
 }
 
@@ -87,6 +108,7 @@ func (m *MemoryStore) BootstrapFirstUser(email, password string) (bool, error) {
 		ID:           m.nextID,
 		Email:        email,
 		PasswordHash: hash,
+		Status:       UserStatusApproved,
 		CreatedAt:    time.Now().UTC(),
 	}
 	m.byID[m.nextID] = email
@@ -104,6 +126,12 @@ func (m *MemoryStore) Login(email, password string) (bool, error) {
 	user, ok := m.users[email]
 	m.mu.RUnlock()
 	if !ok {
+		return false, nil
+	}
+	if user.Status == UserStatusPending {
+		return false, ErrAccountPending
+	}
+	if user.Status == UserStatusRejected {
 		return false, nil
 	}
 
@@ -213,11 +241,95 @@ func (m *MemoryStore) CreateUser(email, password string) (bool, error) {
 		ID:           m.nextID,
 		Email:        email,
 		PasswordHash: passwordHash,
+		Status:       UserStatusPending,
 		CreatedAt:    time.Now().UTC(),
 	}
 	m.byID[m.nextID] = email
 	m.nextID++
 	return true, nil
+}
+
+func (m *MemoryStore) ApproveUser(email string) error {
+	email = normalizeEmail(email)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, ok := m.users[email]
+	if !ok {
+		return ErrEmailNotFound
+	}
+	user.Status = UserStatusApproved
+	m.users[email] = user
+	return nil
+}
+
+func (m *MemoryStore) RejectUser(email string) error {
+	email = normalizeEmail(email)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, ok := m.users[email]
+	if !ok {
+		return ErrEmailNotFound
+	}
+	if user.Status != UserStatusPending {
+		return ErrNotPending
+	}
+	user.Status = UserStatusRejected
+	m.users[email] = user
+	return nil
+}
+
+func (m *MemoryStore) ListPendingUsers() ([]UserInfo, error) {
+	return m.listUsersByStatus(UserStatusPending)
+}
+
+func (m *MemoryStore) ListApprovedUsers() ([]UserInfo, error) {
+	return m.listUsersByStatus(UserStatusApproved)
+}
+
+func (m *MemoryStore) ListRejectedUsers() ([]UserInfo, error) {
+	return m.listUsersByStatus(UserStatusRejected)
+}
+
+func (m *MemoryStore) listUsersByStatus(status string) ([]UserInfo, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]UserInfo, 0)
+	for _, user := range m.users {
+		if user.Status == status {
+			out = append(out, UserInfo{
+				Email:     user.Email,
+				Status:    user.Status,
+				CreatedAt: user.CreatedAt,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out, nil
+}
+
+func (m *MemoryStore) DeleteUsers(emails []string) (int, error) {
+	if len(emails) == 0 {
+		return 0, nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	deleted := 0
+	for _, raw := range emails {
+		email := normalizeEmail(raw)
+		if email == "" {
+			continue
+		}
+		user, ok := m.users[email]
+		if !ok {
+			continue
+		}
+		delete(m.users, email)
+		delete(m.byID, user.ID)
+		deleted++
+	}
+	return deleted, nil
 }
 
 type SQLStore struct {
@@ -304,13 +416,19 @@ func (s *SQLStore) Login(email, password string) (bool, error) {
 		return false, ErrInvalidEmail
 	}
 
-	query := fmt.Sprintf(`SELECT password_hash FROM users WHERE email = %s`, s.ph(1))
-	var hash string
-	if err := s.db.QueryRow(query, email).Scan(&hash); err != nil {
+	query := fmt.Sprintf(`SELECT password_hash, status FROM users WHERE email = %s`, s.ph(1))
+	var hash, status string
+	if err := s.db.QueryRow(query, email).Scan(&hash, &status); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 		return false, fmt.Errorf("query user failed: %w", err)
+	}
+	if status == UserStatusPending {
+		return false, ErrAccountPending
+	}
+	if status == UserStatusRejected {
+		return false, nil
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
@@ -436,8 +554,8 @@ func (s *SQLStore) CreateUser(email, password string) (bool, error) {
 	}
 	defer tx.Rollback()
 
-	insertQuery := fmt.Sprintf(`INSERT INTO users (email, password_hash, created_at) VALUES (%s, %s, %s)`, s.ph(1), s.ph(2), s.ph(3))
-	if _, err := tx.Exec(insertQuery, email, string(passwordHash), time.Now().UTC()); err != nil {
+	insertQuery := fmt.Sprintf(`INSERT INTO users (email, password_hash, status, created_at) VALUES (%s, %s, %s, %s)`, s.ph(1), s.ph(2), s.ph(3), s.ph(4))
+	if _, err := tx.Exec(insertQuery, email, string(passwordHash), UserStatusPending, time.Now().UTC()); err != nil {
 		if isUniqueViolation(err) {
 			return false, ErrEmailExists
 		}
@@ -451,6 +569,119 @@ func (s *SQLStore) CreateUser(email, password string) (bool, error) {
 		return false, fmt.Errorf("commit tx failed: %w", err)
 	}
 	return true, nil
+}
+
+func (s *SQLStore) ApproveUser(email string) error {
+	email = normalizeEmail(email)
+	query := fmt.Sprintf(`UPDATE users SET status = %s WHERE email = %s`, s.ph(1), s.ph(2))
+	result, err := s.db.Exec(query, UserStatusApproved, email)
+	if err != nil {
+		return fmt.Errorf("approve user failed: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check approve result failed: %w", err)
+	}
+	if affected == 0 {
+		return ErrEmailNotFound
+	}
+	return nil
+}
+
+func (s *SQLStore) RejectUser(email string) error {
+	email = normalizeEmail(email)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx failed: %w", err)
+	}
+	defer tx.Rollback()
+
+	selectQuery := fmt.Sprintf(`SELECT status FROM users WHERE email = %s`, s.ph(1))
+	var status string
+	if err := tx.QueryRow(selectQuery, email).Scan(&status); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrEmailNotFound
+		}
+		return fmt.Errorf("query user for reject failed: %w", err)
+	}
+	if status != UserStatusPending {
+		return ErrNotPending
+	}
+
+	updateQuery := fmt.Sprintf(`UPDATE users SET status = %s WHERE email = %s`, s.ph(1), s.ph(2))
+	if _, err := tx.Exec(updateQuery, UserStatusRejected, email); err != nil {
+		return fmt.Errorf("reject user failed: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx failed: %w", err)
+	}
+	return nil
+}
+
+func (s *SQLStore) ListPendingUsers() ([]UserInfo, error) {
+	return s.listUsersByStatus(UserStatusPending)
+}
+
+func (s *SQLStore) ListApprovedUsers() ([]UserInfo, error) {
+	return s.listUsersByStatus(UserStatusApproved)
+}
+
+func (s *SQLStore) ListRejectedUsers() ([]UserInfo, error) {
+	return s.listUsersByStatus(UserStatusRejected)
+}
+
+func (s *SQLStore) listUsersByStatus(status string) ([]UserInfo, error) {
+	query := fmt.Sprintf(`SELECT email, status, created_at FROM users WHERE status = %s ORDER BY created_at ASC`, s.ph(1))
+	rows, err := s.db.Query(query, status)
+	if err != nil {
+		return nil, fmt.Errorf("list users by status failed: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]UserInfo, 0)
+	for rows.Next() {
+		var u UserInfo
+		if err := rows.Scan(&u.Email, &u.Status, &u.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan user failed: %w", err)
+		}
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list users by status failed: %w", err)
+	}
+	return out, nil
+}
+
+func (s *SQLStore) DeleteUsers(emails []string) (int, error) {
+	if len(emails) == 0 {
+		return 0, nil
+	}
+	cleaned := make([]string, 0, len(emails))
+	for _, raw := range emails {
+		if e := normalizeEmail(raw); e != "" {
+			cleaned = append(cleaned, e)
+		}
+	}
+	if len(cleaned) == 0 {
+		return 0, nil
+	}
+	placeholders := make([]string, len(cleaned))
+	args := make([]any, len(cleaned))
+	for i, e := range cleaned {
+		placeholders[i] = s.ph(i + 1)
+		args[i] = e
+	}
+	query := fmt.Sprintf(`DELETE FROM users WHERE email IN (%s)`, strings.Join(placeholders, ", "))
+	result, err := s.db.Exec(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("delete users failed: %w", err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("check delete result failed: %w", err)
+	}
+	return int(affected), nil
 }
 
 func isUniqueViolation(err error) bool {
@@ -481,8 +712,10 @@ func (s *SQLStore) ensureSchema() error {
 				id BIGSERIAL PRIMARY KEY,
 				email TEXT NOT NULL UNIQUE,
 				password_hash TEXT NOT NULL,
+				status VARCHAR(16) NOT NULL DEFAULT 'approved',
 				created_at TIMESTAMPTZ NOT NULL
 			)`,
+			`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'approved'`,
 			`CREATE TABLE IF NOT EXISTS password_reset_tokens (
 				id BIGSERIAL PRIMARY KEY,
 				user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -493,6 +726,7 @@ func (s *SQLStore) ensureSchema() error {
 			)`,
 			`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id)`,
 			`CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires ON password_reset_tokens(expires_at)`,
+			`CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)`,
 		}
 	} else {
 		statements = []string{
@@ -500,8 +734,11 @@ func (s *SQLStore) ensureSchema() error {
 				id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 				email VARCHAR(320) NOT NULL UNIQUE,
 				password_hash TEXT NOT NULL,
+				status VARCHAR(16) NOT NULL DEFAULT 'approved',
 				created_at DATETIME(6) NOT NULL
 			)`,
+			`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'approved'`,
+			`CREATE INDEX idx_users_status ON users(status)`,
 			`CREATE TABLE IF NOT EXISTS password_reset_tokens (
 				id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 				user_id BIGINT NOT NULL,
