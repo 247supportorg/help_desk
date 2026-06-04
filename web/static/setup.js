@@ -162,6 +162,8 @@ setupForm.addEventListener("submit", async (event) => {
     const lines = [
       `Message            : ${result.message}`,
       `Env File           : ${result.envPath}`,
+      `Admin Email        : ${payload.adminEmail}`,
+      `Admin Password     : ${payload.adminPassword}`,
       `Backend            : ${payload.storeBackend}`,
       `DSN                : ${result.dsn}`,
     ];
