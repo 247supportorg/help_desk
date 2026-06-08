@@ -2,6 +2,10 @@
 
 A web-based Help Desk (Technical Support Software) project with a Go backend and ticket workflow for resolving customer requests and technical incidents.
 
+* https://github.com/247supportorg/help_desk
+
+* https://source.masscollabs.xyz/247support/help_desk
+
 ## License
 
 Copyright (c) 2026 QB Networks
