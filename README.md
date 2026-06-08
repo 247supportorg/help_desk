@@ -1,5 +1,7 @@
 # FactoryX Help Desk
 
+(work in progress and will be written from scrach without ai-code)
+
 A web-based Help Desk (Technical Support Software) project with a Go backend and ticket workflow for resolving customer requests and technical incidents.
 
 ## Features
