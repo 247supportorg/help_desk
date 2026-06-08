@@ -1,5 +1,7 @@
 2026-06-09  Mert Gör  <mertgor@qbnetworks.xyz>
 
+	* removed Makefile
+
 	* README.md: (work in progress and will be written from scrach without ai-code)
 
 ChangeLog
